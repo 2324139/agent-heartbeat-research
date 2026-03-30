@@ -1,0 +1,93 @@
+name: Pi Agent Auto Growth
+
+on:
+  schedule:
+    # 每天上午 8 點運行分析
+    - cron: '0 8 * * *'
+    # 每週日上午 9 點生成週報
+    - cron: '0 9 * * 0'
+  # 也可以手動觸發
+  workflow_dispatch:
+
+jobs:
+  daily-analysis:
+    runs-on: ubuntu-latest
+    if: github.event.schedule != '0 9 * * 0'
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: 設置 Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      
+      - name: 安裝依賴
+        run: |
+          pip install pandas numpy matplotlib requests
+      
+      - name: 收集性能指標
+        run: |
+          python scripts/collect_metrics.py
+      
+      - name: 分析性能數據
+        run: |
+          python scripts/analyze_performance.py
+      
+      - name: 生成改進建議
+        run: |
+          python scripts/generate_recommendations.py
+      
+      - name: 自動優化配置
+        run: |
+          python scripts/auto_optimize.py
+      
+      - name: 上傳報告
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: daily-report
+          path: reports/
+      
+      - name: 提交改進
+        if: always()
+        run: |
+          git config --local user.email "agent@pi.dev"
+          git config --local user.name "Pi Growth Agent"
+          git add -A
+          git diff-index --quiet HEAD || git commit -m "自動改進: 性能優化和配置調整"
+          git push
+
+  weekly-report:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 9 * * 0'
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: 設置 Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      
+      - name: 生成週報
+        run: |
+          python scripts/generate_weekly_report.py
+      
+      - name: 創建 GitHub Issue
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('reports/weekly_report.md', 'utf8');
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `📈 每週成長報告 - ${new Date().toISOString().split('T')[0]}`,
+              body: report,
+              labels: ['auto-generated', 'growth-report']
+            });
+      
+      - name: 發佈版本
+        run: |
+          python scripts/publish_release.py
